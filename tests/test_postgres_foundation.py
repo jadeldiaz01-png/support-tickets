@@ -4,12 +4,15 @@ import os
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from api.main import app
 from repositories.db import bind_tenant, get_engine
+from security.context import _resolve_oidc_actor
+from security.oidc import OIDCIdentity
 
 OWNER_URL = os.environ.get("DATABASE_URL_OWNER")
 
