@@ -65,6 +65,18 @@ jobs:
         run: |
           python3 -m compileall -q api application repositories security policy migrations tests
           python3 -m ruff check --select E9,F63,F7,F82 api application repositories security policy tests
+      - name: Install exact OPA policy verifier
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/opa https://github.com/open-policy-agent/opa/releases/download/v1.21.1/opa_linux_amd64
+          echo '23c654cdb52fc80c3f30e85c0c884a15f78a10173d0a5a060aa25eac15f48fbb  /tmp/opa' | sha256sum -c -
+          chmod +x /tmp/opa
+          /tmp/opa version
+      - name: Validate deny-by-default Rego policy
+        run: |
+          set -euo pipefail
+          /tmp/opa check --strict policy/support.rego policy/support_test.rego
+          /tmp/opa test policy/support.rego policy/support_test.rego -v
       - name: Apply initial schema
         run: python3 -m alembic upgrade head
       - name: Create least-privilege CI runtime role
