@@ -28,9 +28,9 @@ All ticket, attachment, email, web, RAG and external API content is UNTRUSTED_DA
 
 | Threat | Initial control | Remaining gate |
 | --- | --- | --- |
-| Cross-tenant read/write | tenant_id + FORCE RLS + integration test | OIDC tenant binding and full CRUD tests |
-| Unauthenticated access | production auth path fails closed | OIDC/JWT integration |
-| Policy bypass | production policy path fails closed | OPA/Rego integration and policy tests |
+| Cross-tenant read/write | tenant_id + FORCE RLS + OIDC subject/tenant binding tests | expand CRUD/property isolation tests |
+| Unauthenticated access | OIDC/JWT verification + durable user binding, fail closed | provision/configure production IdP/JWKS |
+| Policy bypass | remote OPA client + deny-by-default Rego + policy tests | provision/configure production OPA and policy delivery |
 | Duplicate side effect | idempotency key + outbox foundation | worker idempotency + reconciliation |
 | Prompt injection | no LLM authority exists yet | adversarial agent eval suite |
 | Secret exfiltration | no model or connector credential introduced | OpenBao/workload identity |
