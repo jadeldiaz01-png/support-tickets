@@ -145,3 +145,52 @@ def test_row_level_security_blocks_cross_tenant_read(monkeypatch) -> None:
                 {"id": ticket_id},
             ).scalar_one()
     assert visible == 0
+
+
+def test_oidc_subject_is_bound_to_existing_tenant_user() -> None:
+    tenant_a, _, user_a, _, _ = seed()
+
+    actor = _resolve_oidc_actor(
+        OIDCIdentity(
+            tenant_id=tenant_a,
+            external_subject="user-a",
+            role="SUPPORT_AGENT",
+        )
+    )
+
+    assert actor.tenant_id == tenant_a
+    assert actor.actor_id == user_a
+    assert actor.role == "SUPPORT_AGENT"
+    assert actor.external_subject == "user-a"
+
+
+def test_oidc_subject_cannot_cross_tenant_boundary() -> None:
+    tenant_a, _, _, _, _ = seed()
+
+    with pytest.raises(HTTPException) as caught:
+        _resolve_oidc_actor(
+            OIDCIdentity(
+                tenant_id=tenant_a,
+                external_subject="user-b",
+                role="SUPPORT_AGENT",
+            )
+        )
+
+    assert caught.value.status_code == 401
+    assert caught.value.detail == "IDENTITY_NOT_BOUND"
+
+
+def test_oidc_role_must_match_durable_user_role() -> None:
+    tenant_a, _, _, _, _ = seed()
+
+    with pytest.raises(HTTPException) as caught:
+        _resolve_oidc_actor(
+            OIDCIdentity(
+                tenant_id=tenant_a,
+                external_subject="user-a",
+                role="ADMIN",
+            )
+        )
+
+    assert caught.value.status_code == 401
+    assert caught.value.detail == "IDENTITY_NOT_BOUND"
