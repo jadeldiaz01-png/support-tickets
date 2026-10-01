@@ -72,7 +72,11 @@ def get_ticket(
     actor: ActorContext = Depends(get_actor_context),
     session: Session = Depends(get_db),
 ) -> TicketResponse:
-    authorize(\n        actor,\n        "ticket:read",\n        resource={"type": "ticket", "ticket_id": str(ticket_id)},\n    )
+    authorize(
+        actor,
+        "ticket:read",
+        resource={"type": "ticket", "ticket_id": str(ticket_id)},
+    )
     result = TicketService(session).get_ticket(actor=actor, ticket_id=ticket_id)
     if result is None:
         raise HTTPException(status_code=404, detail="TICKET_NOT_FOUND")
