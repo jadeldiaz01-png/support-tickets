@@ -15,9 +15,9 @@ jobs:
     steps:
       - name: Checkout immutable revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Build runtime container
+      - name: Build current Streamlit runtime container
         run: docker build --pull -t jadel-support-runtime:${GITHUB_SHA} .
-      - name: Start and verify health
+      - name: Start and verify current runtime health
         shell: bash
         run: |
           set -euo pipefail
@@ -31,4 +31,89 @@ jobs:
             sleep 2
           done
           echo 'SUPPORT_RUNTIME_HEALTH=FAIL'
+          exit 1
+
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: support
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d support"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL_OWNER: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/support
+      DATABASE_URL: postgresql+psycopg://support_runtime:runtime@127.0.0.1:5432/support
+      SUPPORT_ENV: test
+      SUPPORT_AUTH_MODE: test-header
+      SUPPORT_POLICY_MODE: test-local
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned direct dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check -r requirements-api.txt -r requirements-dev.txt
+      - name: Static correctness checks
+        run: |
+          python3 -m compileall -q api application repositories security policy migrations tests
+          python3 -m ruff check --select E9,F63,F7,F82 api application repositories security policy tests
+      - name: Apply initial schema
+        run: python3 -m alembic upgrade head
+      - name: Create least-privilege CI runtime role
+        run: |
+          python3 - <<'PY'
+          import psycopg
+
+          with psycopg.connect(
+              "postgresql://postgres:postgres@127.0.0.1:5432/support",
+              autocommit=True,
+          ) as conn:
+              conn.execute(
+                  "CREATE ROLE support_runtime LOGIN PASSWORD 'runtime' "
+                  "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+              )
+              conn.execute("GRANT USAGE ON SCHEMA public TO support_runtime")
+              conn.execute(
+                  "GRANT SELECT, INSERT, UPDATE, DELETE "
+                  "ON ALL TABLES IN SCHEMA public TO support_runtime"
+              )
+          print("SUPPORT_RUNTIME_ROLE=PASS")
+          PY
+      - name: Run API and PostgreSQL isolation tests
+        run: python3 -m pytest -q
+      - name: Verify migration rollback and replay
+        run: |
+          python3 -m alembic downgrade base
+          python3 -m alembic upgrade head
+          echo 'SUPPORT_MIGRATION_ROLLBACK_REPLAY=PASS'
+
+  api-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build foundation API container
+        run: docker build --pull -f Dockerfile.api -t jadel-support-api:${GITHUB_SHA} .
+      - name: Verify API liveness without granting production authority
+        run: |
+          set -euo pipefail
+          docker run -d --name jadel-support-api-test -p 18000:8000 jadel-support-api:${GITHUB_SHA}
+          trap 'docker logs jadel-support-api-test || true; docker rm -f jadel-support-api-test || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18000/health/live >/dev/null; then
+              echo 'SUPPORT_API_LIVENESS=PASS'
+              echo 'PRODUCTION_AUTHORIZED=false'
+              exit 0
+            fi
+            sleep 2
+          done
           exit 1
