@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "target": "refs/heads/main",
+  "enforcement": "PLANNED_HUMAN_GATE",
+  "pull_request_required": true,
+  "required_approvals": 1,
+  "require_code_owner_review": true,
+  "require_conversation_resolution": true,
+  "block_force_push": true,
+  "block_deletion": true,
+  "required_checks": [
+    "runtime-container-ci / runtime-container",
+    "runtime-container-ci / foundation",
+    "runtime-container-ci / api-container"
+  ],
+  "production_authorized": false
+}

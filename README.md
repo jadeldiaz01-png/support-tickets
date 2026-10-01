@@ -1,19 +1,18 @@
-# 🎫 Support tickets template
+# Support & Tickets
 
-A simple Streamlit app showing an internal tool that lets you create, manage, and visualize support tickets. 
+Production foundation for the Jadel Tech RD support service.
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://support-tickets-template.streamlit.app/)
+Current state: **FOUNDATION / PRODUCTION_AUTHORIZED=false**.
 
-### How to run it on your own machine
+The original Streamlit UI remains available as a non-authoritative interface while a
+separate FastAPI + PostgreSQL backend is being introduced behind explicit identity,
+policy and deployment gates.
 
-1. Install the requirements
+See:
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+- `docs/ARCHITECTURE.md`
+- `docs/THREAT-MODEL.md`
+- `docs/ADR-001-production-foundation.md`
+- `docs/BRANCH-GOVERNANCE-CONTRACT.md`
 
-2. Run the app
-
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+No repository code, health check or model output grants production authority.
