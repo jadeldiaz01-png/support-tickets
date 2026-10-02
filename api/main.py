@@ -14,7 +14,7 @@ from security.context import ActorContext, get_actor_context
 
 app = FastAPI(
     title="Support & Tickets API",
-    version="0.1.0-foundation",
+    version="0.2.0-identity-policy",
     docs_url=None,
     redoc_url=None,
 )
@@ -54,7 +54,7 @@ def create_ticket(
     actor: ActorContext = Depends(get_actor_context),
     session: Session = Depends(get_db),
 ) -> TicketResponse:
-    authorize(actor, "ticket:create")
+    authorize(actor, "ticket:create", resource={"type": "ticket"})
     result = TicketService(session).create_ticket(
         actor=actor,
         customer_id=payload.customer_id,
@@ -72,7 +72,11 @@ def get_ticket(
     actor: ActorContext = Depends(get_actor_context),
     session: Session = Depends(get_db),
 ) -> TicketResponse:
-    authorize(actor, "ticket:read")
+    authorize(
+        actor,
+        "ticket:read",
+        resource={"type": "ticket", "ticket_id": str(ticket_id)},
+    )
     result = TicketService(session).get_ticket(actor=actor, ticket_id=ticket_id)
     if result is None:
         raise HTTPException(status_code=404, detail="TICKET_NOT_FOUND")

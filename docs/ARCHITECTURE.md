@@ -34,13 +34,15 @@ Client / channel
 - Idempotency key on ticket creation.
 - Ticket event, transactional outbox event and audit event in one transaction.
 - API and DB integration tests.
-- Production fail-closed identity and policy placeholders.
+- Production fail-closed OIDC/JWT verification with durable tenant-user binding.
+- Production fail-closed OPA decision client plus deny-by-default Rego policy.
+- Non-production-only test identity/policy modes with explicit production bypass tests.
 - Separate hardened API image that is not wired into the live fleet.
 
 ## Explicitly not implemented yet
 
-- Production OIDC/JWT verification.
-- OPA/Rego remote decision integration.
+- Provisioned/configured production OIDC identity provider and JWKS endpoint.
+- Provisioned/configured production OPA runtime and policy distribution.
 - Workload identity/OpenBao integration.
 - Outbox worker and external connector.
 - Reconciliation worker.
