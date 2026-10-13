@@ -154,3 +154,5 @@ All external references inform engineering priorities; they do not prove this re
 
 **Stop at HUMAN_REVIEW_REQUIRED:** do not merge, activate integrations,
 change production, send messages or provision paid infrastructure.
+
+Concurrent same-key integration test: six simultaneous create requests, one ticket/message/event/outbox/audit expected. Execute only with isolated CI PostgreSQL; **not certified until exact HEAD CI**.

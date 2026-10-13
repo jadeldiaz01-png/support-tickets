@@ -398,3 +398,39 @@ def test_ticket_status_transition_is_atomic_versioned_and_dashboard_consistent(m
         assert conn.execute(text("SELECT count(*) FROM outbox_events")).scalar_one() == 2
         assert conn.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 2
     owner.dispose()
+
+
+def test_concurrent_retries_create_exactly_one_ticket_and_outbox(monkeypatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    tenant_a, _, user_a, _, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+
+    headers = {
+        "X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
+        "X-Role": "SUPPORT_AGENT", "Idempotency-Key": "concurrent-retry-0001",
+    }
+    payload = {
+        "customer_id": str(customer_a), "subject": "Racing requests",
+        "body": "Same intent must be persisted once", "priority": "HIGH",
+    }
+
+    def submit(_):
+        with TestClient(app) as client:
+            response = client.post("/v1/tickets", headers=headers, json=payload)
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(submit, range(6)))
+
+    assert all(status == 201 for status, _ in results)
+    assert len({body["id"] for _, body in results}) == 1
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.connect() as conn:
+        for table in ("tickets", "ticket_messages", "ticket_events",
+                      "outbox_events", "audit_events"):
+            actual = conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+            assert actual == 1, (table, actual)
+    owner.dispose()
