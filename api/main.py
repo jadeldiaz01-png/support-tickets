@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.schemas import TicketCreate, TicketResponse
+from api.schemas import TicketCreate, TicketResponse, TicketDashboardSummary
 from application.tickets import TicketService
+from application.dashboard import TicketDashboardService
 from policy.authorizer import authorize
 from repositories.db import get_engine
 from security.context import ActorContext, get_actor_context
@@ -81,3 +83,23 @@ def get_ticket(
     if result is None:
         raise HTTPException(status_code=404, detail="TICKET_NOT_FOUND")
     return TicketResponse.model_validate(result)
+
+
+@app.get("/v1/dashboards/tickets/summary", response_model=TicketDashboardSummary)
+def ticket_dashboard_summary(
+    start: date = Query(..., description="Inclusive UTC date, YYYY-MM-DD"),
+    end: date = Query(..., description="Exclusive UTC date, YYYY-MM-DD"),
+    actor: ActorContext = Depends(get_actor_context),
+    session: Session = Depends(get_db),
+) -> TicketDashboardSummary:
+    window_days = (end - start).days
+    if window_days < 1 or window_days > 90:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="DASHBOARD_WINDOW_MUST_BE_1_TO_90_DAYS",
+        )
+    authorize(actor, "dashboard:read", resource={"type": "ticket_dashboard"})
+    result = TicketDashboardService(session).get_summary(
+        actor=actor, start=start, end=end
+    )
+    return TicketDashboardSummary.model_validate(result)
