@@ -101,3 +101,6 @@ in a PR. Do NOT ask the implementer to impersonate the reviewer.
 Primary reference: https://www.postgresql.org/docs/16/ddl-constraints.html
 
 CI G5 synthetic rehearsal deliberately downgrades to 0004, tests 0005 and upgrades back to 0006. Reviewer helper requires the independently supplied exact `G6_EXPECTED_SHA`, never a self-changing hardcoded commit hash.
+
+### G6 legacy migration negative rehearsal
+The CI foundation job now downgrades `0006→0005` **only in disposable CI**, inserts a synthetic cross-tenant approval requester accepted by the old plain FK, verifies that re-upgrading 0006 fails atomically without losing the record, corrects the synthetic link, upgrades, downgrades and re-upgrades while retaining the row. The script requires `G6_DISPOSABLE_TEST_ONLY=YES`, local PostgreSQL 16, `SUPPORT_ENV=test`; no real snapshot or production data. This is not a license to alter historical customer rows.

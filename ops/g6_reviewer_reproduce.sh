@@ -29,8 +29,10 @@ for variable, user in [("DATABASE_URL_OWNER", "postgres"), ("DATABASE_URL", "sup
 print("G6_REVIEW_DB_SHAPE=DISPOSABLE_CANDIDATE (verify localhost is not a production tunnel)")
 PY
 echo "G6_REVIEW_HEAD=$actual"
+echo "G6_REVIEW_NOTE=If clone fails, repair DNS/network or use authorized read-only GitHub download and verify commit objects"
 python3 --version
 python3 -m compileall -q api application repositories security migrations tests
 python3 -m ruff check --select E9,F63,F7,F82 api application repositories security tests
-python3 -m pytest -q tests/test_g6_tenant_fks.py tests/test_g5_permissions_and_catalog.py
+python3 -m pytest -q
+G6_DISPOSABLE_TEST_ONLY=YES python3 ops/g6_migration_rehearsal.py
 echo 'G6_REVIEW_SUITE=PASS (reviewer must independently attest)'
