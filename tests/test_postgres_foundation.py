@@ -247,3 +247,31 @@ def test_dashboard_postgres_isolation_and_no_pii(monkeypatch) -> None:
     assert tenant_a_summary.json()["priority_counts"]["MEDIUM"] == 1
     assert tenant_b_summary.json()["total_created"] == 0
     assert "Confidential" not in str(tenant_a_summary.json())
+
+
+def test_ticket_create_rejects_foreign_tenant_customer_reference(monkeypatch) -> None:
+    tenant_a, tenant_b, _, user_b, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+    response = TestClient(app).post(
+        "/v1/tickets",
+        headers={
+            "X-Tenant-ID": str(tenant_b),
+            "X-Actor-ID": str(user_b),
+            "X-Role": "SUPPORT_AGENT",
+            "Idempotency-Key": "deny-cross-tenant-reference",
+        },
+        json={
+            "customer_id": str(customer_a),
+            "subject": "Attempt to attach foreign customer",
+            "body": "Must be rejected",
+        },
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "CUSTOMER_NOT_FOUND"
+
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM tickets")).scalar_one() == 0
+    owner.dispose()
