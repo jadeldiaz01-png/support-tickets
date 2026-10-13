@@ -118,3 +118,39 @@ python3 -m pytest -q tests/test_dashboard.py tests/test_api.py tests/test_identi
 - Google SRE error budget: https://sre.google/workbook/error-budget-policy/
 
 All external references inform engineering priorities; they do not prove this repository meets the standards.
+
+
+## G2 incremental hardening proposal (2026-10-13, pending CI + review)
+
+- Existing ticket POST now binds a tenant-scoped idempotency key to SHA-256 of
+  actor ID and canonical request intent (customer, subject, body, priority).
+  The fingerprint is stored on the ticket row; raw message content is **not**
+  placed in the fingerprint column. This is an equality fingerprint, **not**
+  a substitute for encryption or data minimization; small-field hashing may
+  be subject to offline guessing if the database leaks.
+- Concurrent submissions use PostgreSQL unique-key conflict handling with
+  `INSERT ... ON CONFLICT DO NOTHING RETURNING`. Only the first insert emits
+  a message, ticket event, outbox event and audit event. Reuse with different
+  intent or records predating fingerprint capture yields HTTP 409.
+- Non-sending internal state transition API:
+  `PATCH /v1/tickets/{ticket_id}/status` with `expected_version`.
+  State graph: OPEN→IN_PROGRESS; IN_PROGRESS→WAITING_CUSTOMER/RESOLVED;
+  WAITING_CUSTOMER→IN_PROGRESS; RESOLVED→IN_PROGRESS/CLOSED;
+  CLOSED terminal. Stale versions/invalid transitions fail with HTTP 409.
+  Each accepted transition writes a ticket event, outbox and audit atomically.
+- New `ticket:transition` OPA contract allows internal ticket roles only.
+  CUSTOMER/SYSTEM_WORKER remain denied.
+- Authenticated dashboard summary sets `Cache-Control: private, no-store`.
+- Migration 0003 adds an optional SHA-256 fingerprint column for existing
+  rows without an unsafe retroactive assumption or mass backfill.
+- Required validation: exact-HEAD CI, two-tenant database cases, negative tests,
+  concurrent first writer test, performance and reviewer security assessment.
+  No external notification dispatcher, customer message send, SLA timer,
+  automated AI action or production deployment is introduced.
+- Source notes: PostgreSQL referential integrity bypasses RLS and OWASP warns
+  against object-level authorization flaws. Both require defense-in-depth:
+  https://www.postgresql.org/docs/17/ddl-rowsecurity.html and
+  https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/
+
+**Stop at HUMAN_REVIEW_REQUIRED:** do not merge, activate integrations,
+change production, send messages or provision paid infrastructure.

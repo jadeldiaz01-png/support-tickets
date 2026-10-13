@@ -275,3 +275,126 @@ def test_ticket_create_rejects_foreign_tenant_customer_reference(monkeypatch) ->
     with owner.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM tickets")).scalar_one() == 0
     owner.dispose()
+
+
+def test_ticket_idempotency_key_is_bound_to_full_intent(monkeypatch) -> None:
+    tenant_a, _, user_a, _, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+    client = TestClient(app)
+    headers = {
+        "X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
+        "X-Role": "SUPPORT_AGENT", "Idempotency-Key": "fingerprinted-request-1",
+    }
+    payload = {"customer_id": str(customer_a), "subject": "Original",
+               "body": "Private original", "priority": "HIGH"}
+    first = client.post("/v1/tickets", headers=headers, json=payload)
+    repeat = client.post("/v1/tickets", headers=headers, json=payload)
+    altered = client.post(
+        "/v1/tickets", headers=headers, json={**payload, "body": "Altered intent"}
+    )
+    assert first.status_code == 201
+    assert repeat.status_code == 201
+    assert first.json()["id"] == repeat.json()["id"]
+    assert altered.status_code == 409
+    assert altered.json()["detail"] == "IDEMPOTENCY_KEY_REUSED"
+
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM tickets")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM ticket_messages")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM outbox_events")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 1
+    owner.dispose()
+
+
+def test_legacy_idempotency_key_fails_closed(monkeypatch) -> None:
+    tenant_a, _, user_a, _, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+    headers = {"X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
+               "X-Role": "SUPPORT_AGENT", "Idempotency-Key": "old-unfingerprinted"}
+    payload = {"customer_id": str(customer_a), "subject": "Before migration", "body": "One"}
+    client = TestClient(app)
+    created = client.post("/v1/tickets", headers=headers, json=payload)
+    assert created.status_code == 201
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.begin() as conn:
+        conn.execute(
+            text("UPDATE tickets SET request_sha256 = NULL WHERE id = :ticket_id"),
+            {"ticket_id": created.json()["id"]},
+        )
+    owner.dispose()
+    replay = client.post("/v1/tickets", headers=headers, json=payload)
+    assert replay.status_code == 409
+    assert replay.json()["detail"] == "IDEMPOTENCY_LEGACY_KEY"
+
+
+def test_ticket_status_transition_is_atomic_versioned_and_dashboard_consistent(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    tenant_a, tenant_b, user_a, user_b, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+    client = TestClient(app)
+
+    def headers(tenant, user):
+        return {"X-Tenant-ID": str(tenant), "X-Actor-ID": str(user),
+                "X-Role": "SUPPORT_AGENT"}
+
+    original = client.post(
+        "/v1/tickets",
+        headers={**headers(tenant_a, user_a), "Idempotency-Key": "transition-test-key"},
+        json={"customer_id": str(customer_a), "subject": "Transition", "body": "Private"},
+    )
+    assert original.status_code == 201
+    ticket_id = original.json()["id"]
+    endpoint = f"/v1/tickets/{ticket_id}/status"
+
+    invalid = client.patch(
+        endpoint, headers=headers(tenant_a, user_a),
+        json={"status": "CLOSED", "expected_version": 1},
+    )
+    cross_tenant = client.patch(
+        endpoint, headers=headers(tenant_b, user_b),
+        json={"status": "IN_PROGRESS", "expected_version": 1},
+    )
+    updated = client.patch(
+        endpoint, headers=headers(tenant_a, user_a),
+        json={"status": "IN_PROGRESS", "expected_version": 1},
+    )
+    stale = client.patch(
+        endpoint, headers=headers(tenant_a, user_a),
+        json={"status": "IN_PROGRESS", "expected_version": 1},
+    )
+
+    assert invalid.status_code == 409
+    assert invalid.json()["detail"] == "TICKET_INVALID_TRANSITION"
+    assert cross_tenant.status_code == 404
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 2
+    assert updated.json()["status"] == "IN_PROGRESS"
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == "TICKET_VERSION_CONFLICT"
+
+    now = datetime.now(timezone.utc).date()
+    summary = client.get(
+        "/v1/dashboards/tickets/summary",
+        params={"start": (now - timedelta(days=1)).isoformat(),
+                "end": (now + timedelta(days=1)).isoformat()},
+        headers={**headers(tenant_a, user_a), "X-Role": "SUPERVISOR"},
+    )
+    assert summary.status_code == 200
+    assert summary.json()["status_counts"]["IN_PROGRESS"] == 1
+    assert summary.json()["status_counts"]["OPEN"] == 0
+    assert summary.headers["cache-control"] == "private, no-store"
+
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM ticket_events")).scalar_one() == 2
+        assert conn.execute(text("SELECT count(*) FROM outbox_events")).scalar_one() == 2
+        assert conn.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 2
+    owner.dispose()

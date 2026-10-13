@@ -38,3 +38,11 @@ allow if {
     input.action == "dashboard:read"
     input.resource.type == "ticket_dashboard"
 }
+
+allow if {
+    valid_actor
+    input.action == "ticket:transition"
+    input.resource.type == "ticket"
+    is_string(input.resource.ticket_id)
+    input.resource.ticket_id != ""
+}

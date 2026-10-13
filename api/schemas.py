@@ -48,3 +48,12 @@ class TicketDashboardSummary(BaseModel):
     priority_counts: dict[str, int]
     created_by_day: list[TicketDashboardDay]
     generated_at: datetime
+
+
+class TicketStatusTransition(BaseModel):
+    """Internal transition with optimistic concurrency; not a customer message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED"]
+    expected_version: int = Field(ge=1)

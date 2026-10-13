@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.schemas import TicketCreate, TicketResponse, TicketDashboardSummary
+from api.schemas import (
+    TicketCreate, TicketDashboardSummary, TicketResponse, TicketStatusTransition,
+)
 from application.tickets import TicketService
 from application.dashboard import TicketDashboardService
 from policy.authorizer import authorize
@@ -85,8 +87,28 @@ def get_ticket(
     return TicketResponse.model_validate(result)
 
 
+
+@app.patch("/v1/tickets/{ticket_id}/status", response_model=TicketResponse)
+def transition_ticket_status(
+    ticket_id: UUID,
+    payload: TicketStatusTransition,
+    actor: ActorContext = Depends(get_actor_context),
+    session: Session = Depends(get_db),
+) -> TicketResponse:
+    authorize(
+        actor, "ticket:transition",
+        resource={"type": "ticket", "ticket_id": str(ticket_id)},
+    )
+    result = TicketService(session).transition_status(
+        actor=actor, ticket_id=ticket_id,
+        expected_version=payload.expected_version, new_status=payload.status,
+    )
+    return TicketResponse.model_validate(result)
+
+
 @app.get("/v1/dashboards/tickets/summary", response_model=TicketDashboardSummary)
 def ticket_dashboard_summary(
+    response: Response,
     start: date = Query(..., description="Inclusive UTC date, YYYY-MM-DD"),
     end: date = Query(..., description="Exclusive UTC date, YYYY-MM-DD"),
     actor: ActorContext = Depends(get_actor_context),
@@ -102,4 +124,5 @@ def ticket_dashboard_summary(
     result = TicketDashboardService(session).get_summary(
         actor=actor, start=start, end=end
     )
+    response.headers["Cache-Control"] = "private, no-store"
     return TicketDashboardSummary.model_validate(result)
