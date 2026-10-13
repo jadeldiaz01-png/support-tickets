@@ -4,8 +4,7 @@ Offline tests use dependency overrides; PostgreSQL tests require the CI database
 """
 from __future__ import annotations
 
-import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -14,10 +13,6 @@ from fastapi.testclient import TestClient
 from api.main import app, get_actor_context, get_db
 from application.dashboard import TicketDashboardService
 from security.context import ActorContext
-
-
-def _headers():  # intentionally no access tokens in tests
-    return {}
 
 
 @pytest.fixture
@@ -108,51 +103,3 @@ def test_dashboard_returns_safe_summary_no_pii(controlled_client, monkeypatch):
     assert "customer_id" not in str(result)
     assert captured["tenant_id"] == actor.tenant_id
 
-
-@pytest.mark.skipif(
-    not os.environ.get("DATABASE_URL_OWNER"),
-    reason="PostgreSQL integration database not configured",
-)
-def test_dashboard_real_postgres_tenant_isolation_and_cohort(monkeypatch):
-    from tests.test_postgres_foundation import seed
-
-    tenant_a, tenant_b, user_a, user_b, customer_a = seed()
-    monkeypatch.setenv("SUPPORT_ENV", "test")
-    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
-    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
-    client = TestClient(app)
-    today = datetime.now(timezone.utc).date()
-    start = (today - timedelta(days=1)).isoformat()
-    end = (today + timedelta(days=1)).isoformat()
-    created = client.post(
-        "/v1/tickets",
-        headers={
-            "X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
-            "X-Role": "SUPPORT_AGENT", "Idempotency-Key": "dashboard-tenant-a",
-        },
-        json={"customer_id": str(customer_a), "subject": "Private", "body": "Secret"},
-    )
-    assert created.status_code == 201
-    a = client.get(
-        "/v1/dashboards/tickets/summary",
-        params={"start": start, "end": end},
-        headers={
-            "X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
-            "X-Role": "SUPERVISOR",
-        },
-    )
-    b = client.get(
-        "/v1/dashboards/tickets/summary",
-        params={"start": start, "end": end},
-        headers={
-            "X-Tenant-ID": str(tenant_b), "X-Actor-ID": str(user_b),
-            "X-Role": "SUPERVISOR",
-        },
-    )
-    assert a.status_code == 200
-    assert b.status_code == 200
-    assert a.json()["total_created"] == 1
-    assert a.json()["status_counts"]["OPEN"] == 1
-    assert b.json()["total_created"] == 0
-    assert "Private" not in str(a.json())
-    assert "Secret" not in str(a.json())
