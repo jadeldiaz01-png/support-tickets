@@ -197,3 +197,53 @@ def test_oidc_role_must_match_durable_user_role() -> None:
 
     assert caught.value.status_code == 401
     assert caught.value.detail == "IDENTITY_NOT_BOUND"
+
+
+def test_dashboard_postgres_isolation_and_no_pii(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    tenant_a, tenant_b, user_a, user_b, customer_a = seed()
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+    client = TestClient(app)
+
+    now = datetime.now(timezone.utc).date()
+    params = {
+        "start": (now - timedelta(days=1)).isoformat(),
+        "end": (now + timedelta(days=1)).isoformat(),
+    }
+    result = client.post(
+        "/v1/tickets",
+        headers={
+            "X-Tenant-ID": str(tenant_a), "X-Actor-ID": str(user_a),
+            "X-Role": "SUPPORT_AGENT", "Idempotency-Key": "dashboard-isolation-a1",
+        },
+        json={
+            "customer_id": str(customer_a),
+            "subject": "Confidential customer subject",
+            "body": "Confidential customer body",
+        },
+    )
+    assert result.status_code == 201
+
+    def get_summary(tenant, user):
+        return client.get(
+            "/v1/dashboards/tickets/summary", params=params,
+            headers={
+                "X-Tenant-ID": str(tenant),
+                "X-Actor-ID": str(user),
+                "X-Role": "SUPERVISOR",
+            },
+        )
+
+    tenant_a_summary = get_summary(tenant_a, user_a)
+    tenant_b_summary = get_summary(tenant_b, user_b)
+
+    assert tenant_a_summary.status_code == 200
+    assert tenant_b_summary.status_code == 200
+    assert tenant_a_summary.json()["total_created"] == 1
+    assert tenant_a_summary.json()["status_counts"]["OPEN"] == 1
+    assert tenant_a_summary.json()["priority_counts"]["MEDIUM"] == 1
+    assert tenant_b_summary.json()["total_created"] == 0
+    assert "Confidential" not in str(tenant_a_summary.json())
