@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -43,6 +44,21 @@ class TicketService:
             ).mappings().first()
             if existing:
                 return dict(existing)
+
+            # PostgreSQL FK checks are not a tenant-ownership guarantee.
+            # Verify the referenced customer under the current RLS context.
+            if customer_id is not None:
+                customer = self.session.execute(
+                    text(
+                        """
+                        SELECT id FROM customers
+                        WHERE id = :customer_id AND tenant_id = :tenant_id
+                        """
+                    ),
+                    {"customer_id": customer_id, "tenant_id": actor.tenant_id},
+                ).scalar_one_or_none()
+                if customer is None:
+                    raise HTTPException(status_code=404, detail="CUSTOMER_NOT_FOUND")
 
             ticket_id = uuid4()
             self.session.execute(
