@@ -116,38 +116,140 @@ def forged(child,col, ids):
 @pytest.mark.parametrize("child,parent,col,already",REFERENCES)
 def test_g6_all_13_foreign_tenant_references_fail(child,parent,col,already,tenants):
     sql,params=forged(child,col,tenants)
+    expected_fk = (
+        "fk_assignments_tenant_ticket" if already and col == "ticket_id"
+        else "fk_assignments_tenant_user" if already
+        else f"g6_fk_{child}_{col}"
+    )
     with Session(get_engine()) as session:
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError) as rejected:
             with session.begin():
-                bind_tenant(session,tenants["tb"])
-                session.execute(text(sql),params)
+                bind_tenant(session, tenants["tb"])
+                session.execute(text(sql), params)
+    # A 23503 from *the intended tenant-scoped FK* is evidence of isolation;
+    # an unrelated NOT NULL/CHECK/UNIQUE violation must NOT be counted.
+    assert rejected.value.orig.sqlstate == "23503"
+    assert rejected.value.orig.diag.constraint_name == expected_fk
+
+def _expected_g61_fk_contract():
+    # Each FK is identified by its own unique constraint name, including
+    # multiple distinct references to users from the same child table.
+    expected = {}
+    for child, parent, col, already in REFERENCES:
+        name = (
+            ("fk_assignments_tenant_ticket" if col == "ticket_id"
+             else "fk_assignments_tenant_user")
+            if already else f"g6_fk_{child}_{col}"
+        )
+        assert name not in expected
+        expected[name] = {
+            "child_name": child,
+            "parent_name": parent,
+            "pairs": (("tenant_id", "tenant_id"), (col, "id")),
+        }
+    assert len(expected) == 13
+    return expected
+
+
+def _assert_g61_fk_catalog(rows):
+    expected = _expected_g61_fk_contract()
+    names = [row["conname"] for row in rows]
+    assert len(names) == 13
+    assert set(names) == set(expected)
+    assert len(names) == len(set(names))
+    for row in rows:
+        contract = expected[row["conname"]]
+        assert row["child_name"] == contract["child_name"]
+        assert row["parent_name"] == contract["parent_name"]
+        assert row["convalidated"] is True
+        local = list(row["local_columns"])
+        remote = list(row["parent_columns"])
+        assert len(local) == 2 and len(remote) == 2
+        # conkey[i] -> confkey[i], not mere presence of 'tenant_id'
+        # on a child FK's conkey. The order is declared by the migration.
+        assert tuple(zip(local, remote, strict=True)) == contract["pairs"]
+
+
+def _synthetic_catalog():
+    # Pure negative test of the TEST ASSERTION (a wrong column mapping
+    # must not be accepted even if tenant_id appears in conkey).
+    return [
+        {
+            "conname": name,
+            "child_name": contract["child_name"],
+            "parent_name": contract["parent_name"],
+            "convalidated": True,
+            "local_columns": [p[0] for p in contract["pairs"]],
+            "parent_columns": [p[1] for p in contract["pairs"]],
+        }
+        for name, contract in _expected_g61_fk_contract().items()
+    ]
+
+
+def test_g61_catalog_assertion_accepts_only_exact_column_pairs():
+    _assert_g61_fk_catalog(_synthetic_catalog())
+
+
+def test_g61_catalog_assertion_rejects_tenant_mapping_to_parent_id():
+    synthetic = _synthetic_catalog()
+    # Still includes tenant_id locally: the old boolean check passed this.
+    synthetic[0]["parent_columns"] = ["id", "tenant_id"]
+    with pytest.raises(AssertionError):
+        _assert_g61_fk_catalog(synthetic)
+
+
+def test_g61_catalog_assertion_rejects_unvalidated_or_missing_fk():
+    rows = _synthetic_catalog()
+    rows[0]["convalidated"] = False
+    with pytest.raises(AssertionError):
+        _assert_g61_fk_catalog(rows)
+    with pytest.raises(AssertionError):
+        _assert_g61_fk_catalog(_synthetic_catalog()[:-1])
+
 
 def test_g6_catalog_has_no_plain_cross_tenant_fk_edges(tenants):
-    owner=create_engine(OWNER_URL,future=True)
-    with owner.connect() as c:
-        rows=c.execute(text("""
-            SELECT child.relname AS child_name,parent.relname AS parent_name,
-              con.conname,con.convalidated,
-              COALESCE((SELECT bool_or(a.attname='tenant_id')
-                FROM unnest(con.conkey) AS k(attnum)
-                JOIN pg_attribute a ON a.attrelid=con.conrelid
-                  AND a.attnum=k.attnum),false) AS tenant_coupled
+    owner = create_engine(OWNER_URL, future=True)
+    with owner.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT child.relname AS child_name,
+                   parent.relname AS parent_name,
+                   con.conname AS conname,
+                   con.convalidated AS convalidated,
+                   ARRAY(
+                       SELECT ca.attname
+                       FROM unnest(con.conkey) WITH ORDINALITY
+                            AS key(child_attnum, position)
+                       JOIN pg_attribute ca
+                         ON ca.attrelid=con.conrelid
+                        AND ca.attnum=key.child_attnum
+                       ORDER BY key.position
+                   ) AS local_columns,
+                   ARRAY(
+                       SELECT pa.attname
+                       FROM unnest(con.confkey) WITH ORDINALITY
+                            AS key(parent_attnum, position)
+                       JOIN pg_attribute pa
+                         ON pa.attrelid=con.confrelid
+                        AND pa.attnum=key.parent_attnum
+                       ORDER BY key.position
+                   ) AS parent_columns
             FROM pg_constraint con
             JOIN pg_class child ON child.oid=con.conrelid
             JOIN pg_class parent ON parent.oid=con.confrelid
             WHERE con.contype='f'
               AND child.relnamespace='public'::regnamespace
-              AND parent.relname<>'tenants'
-              AND EXISTS (SELECT 1 FROM pg_attribute a
-                  WHERE a.attrelid=con.conrelid AND a.attname='tenant_id'
-                    AND NOT a.attisdropped)
+              AND parent.relname <> 'tenants'
+              AND EXISTS (
+                  SELECT 1 FROM pg_attribute a
+                  WHERE a.attrelid=con.conrelid
+                    AND a.attname='tenant_id'
+                    AND NOT a.attisdropped
+              )
+            ORDER BY child.relname, con.conname
         """)).mappings().all()
     owner.dispose()
-    assert len(rows)==13
-    assert all(r["tenant_coupled"] and r["convalidated"] for r in rows)
-    assert {(r["child_name"],r["parent_name"]) for r in rows} == {
-       (child,parent) for child,parent,col,already in REFERENCES
-    }
+    _assert_g61_fk_catalog(rows)
+
 
 def test_g6_nullable_ref_on_delete_only_nulls_ref_not_tenant(tenants):
     owner=create_engine(OWNER_URL,future=True)
