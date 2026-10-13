@@ -87,7 +87,7 @@ def main():
                 SELECT tgname,tgenabled FROM pg_trigger
                 WHERE tgrelid='public.audit_events'::regclass AND NOT tgisinternal
             """)).all()
-        if version != "0005_tenant_audit_guard":
+        if version != "0006_tenant_fks":
             raise AssertionError("G5_UNEXPECTED_SCHEMA_VERSION")
         if role != "support_runtime" or any(attrs) or members:
             raise AssertionError("G5_UNEXPECTED_RUNTIME_ROLE_OR_MEMBERSHIP")
@@ -102,6 +102,8 @@ def main():
             f'{f["child_name"]}.{f["conname"]}->{f["parent_name"]}'
             for f in fkrows if not f["coupled"]
         )
+        if len(fkrows) != 13 or uncoupled:
+            raise AssertionError("G6_FK_NOT_FULLY_TENANT_COUPLED")
         report = {
             "scope": "SYNTHETIC_DISPOSABLE_CI_ONLY",
             "schema_version": version,
