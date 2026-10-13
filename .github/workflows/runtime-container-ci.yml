@@ -58,6 +58,20 @@ jobs:
     steps:
       - name: Checkout immutable revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # Run SQL/OPA/pytest against immutable HEAD, NOT GitHub's PR merge ref.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify precise source revision for G6.1 tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          tested="$(git rev-parse HEAD)"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          [[ "$tested" == "$expected" ]] || {
+            echo 'G61_EXACT_HEAD_MISMATCH=FAIL'; exit 1;
+          }
+          echo "G61_EXACT_HEAD_TESTED=$tested"
+          echo 'G61_EXACT_HEAD_MISMATCH=NONE'
       - name: Install pinned direct dependencies
         run: |
           python3 -m pip install --disable-pip-version-check -r requirements-api.txt -r requirements-dev.txt
