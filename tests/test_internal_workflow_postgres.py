@@ -8,7 +8,62 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
 from api.main import app
-from tests.test_postgres_foundation import seed, OWNER_URL
+from uuid import UUID
+from sqlalchemy import text
+
+OWNER_URL = os.environ.get("DATABASE_URL_OWNER")
+
+def seed() -> tuple[UUID, UUID, UUID, UUID, UUID]:
+    owner = create_engine(OWNER_URL, future=True)
+    tenant_a, tenant_b = uuid4(), uuid4()
+    user_a, user_b = uuid4(), uuid4()
+    customer_a = uuid4()
+
+    with owner.begin() as conn:
+        conn.execute(
+            text(
+                """
+                TRUNCATE TABLE
+                    reconciliation_records, outbox_events, tool_intents,
+                    approval_requests, ticket_sla_state, ticket_tags,
+                    ticket_assignments, ticket_events, ticket_messages,
+                    audit_events, knowledge_sources, tickets, customers,
+                    users, tenants
+                CASCADE
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO tenants (id, slug) "
+                "VALUES (:a, 'tenant-a'), (:b, 'tenant-b')"
+            ),
+            {"a": tenant_a, "b": tenant_b},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (id, tenant_id, external_subject, role)
+                VALUES
+                    (:ua, :ta, 'user-a', 'SUPPORT_AGENT'),
+                    (:ub, :tb, 'user-b', 'SUPPORT_AGENT')
+                """
+            ),
+            {"ua": user_a, "ta": tenant_a, "ub": user_b, "tb": tenant_b},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO customers (id, tenant_id, external_ref, display_name)
+                VALUES (:id, :tenant_id, 'customer-a', 'Customer A')
+                """
+            ),
+            {"id": customer_a, "tenant_id": tenant_a},
+        )
+    owner.dispose()
+    return tenant_a, tenant_b, user_a, user_b, customer_a
+
+
 
 pytestmark = pytest.mark.skipif(not OWNER_URL, reason="PostgreSQL test DB required")
 
