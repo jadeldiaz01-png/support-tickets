@@ -31,3 +31,10 @@ allow if {
     is_string(input.resource.ticket_id)
     input.resource.ticket_id != ""
 }
+
+allow if {
+    valid_actor
+    input.actor.role in {"SUPERVISOR", "ADMIN"}
+    input.action == "dashboard:read"
+    input.resource.type == "ticket_dashboard"
+}
