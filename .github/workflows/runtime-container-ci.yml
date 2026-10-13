@@ -97,6 +97,17 @@ jobs:
                   "GRANT SELECT, INSERT, UPDATE, DELETE "
                   "ON ALL TABLES IN SCHEMA public TO support_runtime"
               )
+          # H-05: scoped service role may append and query, never mutate audit.
+          # Deny explicitly even though the preceding blanket grant included DML.
+          conn.execute(
+              "REVOKE UPDATE, DELETE, TRUNCATE "
+              "ON TABLE public.audit_events FROM support_runtime"
+          )
+          conn.execute(
+              "REVOKE UPDATE, DELETE, TRUNCATE "
+              "ON TABLE public.audit_events FROM PUBLIC"
+          )
+          print("SUPPORT_AUDIT_RUNTIME_APPEND_ONLY=PASS")
           print("SUPPORT_RUNTIME_ROLE=PASS")
           PY
       - name: Run API and PostgreSQL isolation tests
