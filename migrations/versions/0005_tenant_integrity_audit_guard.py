@@ -1,6 +1,6 @@
 """Bind ticket assignment FKs to tenant and block audit row mutation.
 
-Revision ID: 0005_tenant_integrity_audit_guard
+Revision ID: 0005_tenant_audit_guard
 Revises: 0004_active_assignment_index
 Create Date: 2026-10-13
 
@@ -10,7 +10,7 @@ production rollout; production permission is NOT conferred by this migration.
 """
 from alembic import op
 
-revision = "0005_tenant_integrity_audit_guard"
+revision = "0005_tenant_audit_guard"
 down_revision = "0004_active_assignment_index"
 branch_labels = None
 depends_on = None
