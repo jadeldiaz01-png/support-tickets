@@ -59,3 +59,21 @@ def test_ticket_transition_fails_closed_without_auth(monkeypatch) -> None:
     )
     assert response.status_code == 503
     assert response.json()["detail"] == "AUTH_NOT_CONFIGURED"
+
+
+def test_internal_workflow_fails_closed_without_oidc(monkeypatch):
+    monkeypatch.setenv("SUPPORT_ENV", "dev")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "disabled")
+    ticket_id = "00000000-0000-0000-0000-000000000001"
+    a = TestClient(app).patch(
+        f"/v1/tickets/{ticket_id}/assignment",
+        json={"assignee_user_id": None, "expected_version": 1},
+    )
+    n = TestClient(app).post(
+        f"/v1/tickets/{ticket_id}/internal-notes",
+        json={"body": "Confidential", "expected_version": 1},
+    )
+    assert a.status_code == 503
+    assert n.status_code == 503
+    assert a.json()["detail"] == "AUTH_NOT_CONFIGURED"
+    assert n.json()["detail"] == "AUTH_NOT_CONFIGURED"

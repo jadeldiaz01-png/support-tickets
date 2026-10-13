@@ -16,7 +16,10 @@ MAX_OPA_RESPONSE_BYTES = 1024 * 1024
 
 def _local_allowed(actor: ActorContext, action: str) -> bool:
     return (
-        (action in {"ticket:create", "ticket:read", "ticket:transition"} or (action == "dashboard:read" and actor.role in {"SUPERVISOR", "ADMIN"}))
+        (
+            action in {"ticket:create", "ticket:read", "ticket:transition", "ticket:internal_note"}
+            or (action in {"dashboard:read", "ticket:assign"} and actor.role in {"SUPERVISOR", "ADMIN"})
+        )
         and actor.role in INTERNAL_TICKET_ROLES
     )
 

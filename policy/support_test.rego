@@ -133,3 +133,52 @@ test_transition_requires_ticket_id if {
         "resource": {"type": "ticket"},
     }
 }
+
+
+test_supervisor_can_assign_ticket if {
+    authz.allow with input as {
+        "actor": supervisor,
+        "action": "ticket:assign",
+        "resource": {"type": "ticket", "ticket_id": "33333333-3333-3333-3333-333333333333"},
+    }
+}
+
+test_admin_can_assign_ticket if {
+    authz.allow with input as {
+        "actor": admin,
+        "action": "ticket:assign",
+        "resource": {"type": "ticket", "ticket_id": "33333333-3333-3333-3333-333333333333"},
+    }
+}
+
+test_support_agent_cannot_assign_ticket if {
+    not authz.allow with input as {
+        "actor": actor,
+        "action": "ticket:assign",
+        "resource": {"type": "ticket", "ticket_id": "33333333-3333-3333-3333-333333333333"},
+    }
+}
+
+test_customer_cannot_add_internal_note if {
+    not authz.allow with input as {
+        "actor": object.union(actor, {"role": "CUSTOMER"}),
+        "action": "ticket:internal_note",
+        "resource": {"type": "ticket", "ticket_id": "33333333-3333-3333-3333-333333333333"},
+    }
+}
+
+test_support_agent_can_add_internal_note if {
+    authz.allow with input as {
+        "actor": actor,
+        "action": "ticket:internal_note",
+        "resource": {"type": "ticket", "ticket_id": "33333333-3333-3333-3333-333333333333"},
+    }
+}
+
+test_assign_requires_ticket_id if {
+    not authz.allow with input as {
+        "actor": supervisor,
+        "action": "ticket:assign",
+        "resource": {"type": "ticket"},
+    }
+}

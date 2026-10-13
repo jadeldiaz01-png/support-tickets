@@ -57,3 +57,37 @@ class TicketStatusTransition(BaseModel):
 
     status: Literal["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED"]
     expected_version: int = Field(ge=1)
+
+
+class TicketAssignRequest(BaseModel):
+    """Assign or unassign internally. No outbound notification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assignee_user_id: UUID | None
+    expected_version: int = Field(ge=1)
+
+
+class TicketAssignResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticket_id: UUID
+    assignee_user_id: UUID | None
+    version: int = Field(ge=2)
+
+
+class TicketInternalNoteCreate(BaseModel):
+    """Internal-only human note, not a customer-visible reply."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=20000)
+    expected_version: int = Field(ge=1)
+
+
+class TicketInternalNoteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticket_id: UUID
+    message_id: UUID
+    version: int = Field(ge=2)

@@ -46,3 +46,21 @@ allow if {
     is_string(input.resource.ticket_id)
     input.resource.ticket_id != ""
 }
+
+
+allow if {
+    valid_actor
+    input.actor.role in {"SUPERVISOR", "ADMIN"}
+    input.action == "ticket:assign"
+    input.resource.type == "ticket"
+    is_string(input.resource.ticket_id)
+    input.resource.ticket_id != ""
+}
+
+allow if {
+    valid_actor
+    input.action == "ticket:internal_note"
+    input.resource.type == "ticket"
+    is_string(input.resource.ticket_id)
+    input.resource.ticket_id != ""
+}
