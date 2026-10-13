@@ -66,3 +66,46 @@ test_unknown_action_denied if {
         "resource": {"type": "ticket"},
     }
 }
+
+supervisor := object.union(actor, {"role": "SUPERVISOR"})
+admin := object.union(actor, {"role": "ADMIN"})
+
+test_supervisor_dashboard_read if {
+    authz.allow with input as {
+        "actor": supervisor,
+        "action": "dashboard:read",
+        "resource": {"type": "ticket_dashboard"},
+    }
+}
+
+test_admin_dashboard_read if {
+    authz.allow with input as {
+        "actor": admin,
+        "action": "dashboard:read",
+        "resource": {"type": "ticket_dashboard"},
+    }
+}
+
+test_support_agent_dashboard_denied if {
+    not authz.allow with input as {
+        "actor": actor,
+        "action": "dashboard:read",
+        "resource": {"type": "ticket_dashboard"},
+    }
+}
+
+test_dashboard_wrong_resource_denied if {
+    not authz.allow with input as {
+        "actor": supervisor,
+        "action": "dashboard:read",
+        "resource": {"type": "ticket"},
+    }
+}
+
+test_dashboard_untrusted_role_denied if {
+    not authz.allow with input as {
+        "actor": object.union(actor, {"role": "CUSTOMER"}),
+        "action": "dashboard:read",
+        "resource": {"type": "ticket_dashboard"},
+    }
+}
