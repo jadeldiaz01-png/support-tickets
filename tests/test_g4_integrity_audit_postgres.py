@@ -16,7 +16,62 @@ from sqlalchemy.orm import Session
 
 from api.main import app
 from repositories.db import get_engine, bind_tenant
-from tests.test_g3_audit_postgres import seed, test_env, make_ticket, headers, OWNER_URL
+OWNER_URL = os.environ.get("DATABASE_URL_OWNER")
+
+def seed():
+    """The same small two-tenant fixture as the existing G3 suite."""
+    owner = create_engine(OWNER_URL, future=True)
+    tenant_a, tenant_b = uuid4(), uuid4()
+    user_a, user_b, secondary_a, customer_a = uuid4(), uuid4(), uuid4(), uuid4()
+    with owner.begin() as con:
+        con.execute(text("""
+            TRUNCATE TABLE reconciliation_records, outbox_events, tool_intents,
+                approval_requests, ticket_sla_state, ticket_tags,
+                ticket_assignments, ticket_events, ticket_messages,
+                audit_events, knowledge_sources, tickets, customers,
+                users, tenants CASCADE
+        """))
+        con.execute(text("""
+            INSERT INTO tenants(id, slug)
+            VALUES (:ta, 'audit-tenant-a'), (:tb, 'audit-tenant-b')
+        """), {"ta": tenant_a, "tb": tenant_b})
+        con.execute(text("""
+            INSERT INTO users(id, tenant_id, external_subject, role)
+            VALUES (:ua,:ta,'audit-user-a','SUPPORT_AGENT'),
+                   (:ub,:tb,'audit-user-b','SUPPORT_AGENT'),
+                   (:sa,:ta,'audit-secondary-a','SUPPORT_AGENT')
+        """), {"ua": user_a, "ub": user_b, "sa": secondary_a,
+               "ta": tenant_a, "tb": tenant_b})
+        con.execute(text("""
+            INSERT INTO customers(id,tenant_id,external_ref,display_name)
+            VALUES (:id,:ta,'customer-a','Audit fixture')
+        """), {"id": customer_a, "ta": tenant_a})
+    owner.dispose()
+    return tenant_a, tenant_b, user_a, user_b, secondary_a, customer_a
+
+
+def test_env(monkeypatch):
+    monkeypatch.setenv("SUPPORT_ENV", "test")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "test-header")
+    monkeypatch.setenv("SUPPORT_POLICY_MODE", "test-local")
+
+
+def headers(tenant, user, role="SUPPORT_AGENT"):
+    return {"X-Tenant-ID": str(tenant), "X-Actor-ID": str(user),
+            "X-Role": role}
+
+
+def make_ticket(client, tenant, user, customer):
+    created = client.post(
+        "/v1/tickets",
+        headers={**headers(tenant, user), "Idempotency-Key": "audit-h1234-new"},
+        json={"subject": "Audit ticket", "body": "Internal fixture",
+              "customer_id": str(customer)},
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
 
 pytestmark = pytest.mark.skipif(
     not OWNER_URL, reason="Require disposable isolated PostgreSQL CI database"
