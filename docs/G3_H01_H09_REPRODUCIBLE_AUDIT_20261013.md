@@ -29,7 +29,7 @@
 | H-06 | Alembic 0004 unique partial index; migration replay CI | Synthetic preexisting duplicates must prevent index build; read-only preflight SQL | Actual tenant DB state and isolated representative restore not inspected; **BLOCKED** |
 | H-07 | OIDC/JWKS verifier, OPA fail-closed contract, CI policy tests | Production test-header injection blocked; missing policy and malformed URL denied | Real IdP/JWKS/OPA outage, rotation, mTLS and work identity not certified; **BLOCKED** |
 | H-08 | No external delivery adapter in G3; internal note does not write outbox | API route absence + outbox count unchanged after note | External workflows not configured; future workers must get explicit gate; **PARTIAL** |
-| H-09 | CI 38 pytest/20 OPA/3 jobs on PR #7; reviewer COMMENTED/HOLD | Exact refs + evidence template below | GitHub branch protection endpoints inaccessible to integration; no independent reproduced verdict or approval; **BLOCKED** |
+| H-09 | CI 38 pytest/20 OPA/3 jobs on PR #7; reviewer COMMENTED/HOLD | Live GitHub ruleset #24338389 read-only snapshot + exact refs + evidence template | Ruleset active, 1 approval/CODEOWNERS, 3 required checks, thread resolution, no bypass, no non-fast-forward/deletion. **Stale approval dismissal OFF** and **last-push independent approval OFF**; human validation and correction decisions remain **HOLD** |
 
 ## Baseline commands for independent reviewer
 
@@ -71,10 +71,17 @@
 5. Evaluate before/after counts of **synthetic** records; record all PASS,
    FAIL, XFAIL, XPASS, SKIP. Do not convert XFAIL to PASS. Confirm GitHub
    Actions three jobs and the *exact* audit SHA match.
-6. **Administrative H-09:** repository administrator must read and evidence
-   real `main` ruleset or branch protection, required checks, approvals, stale
-   dismissal, codeowners, bypass users, force-push restrictions. An API 403
-   is `UNKNOWN/BLOCKED`, not proof that controls are enabled or absent.
+6. **Administrative H-09:** read-only GitHub ruleset #24338389 (2026-10-13)
+   is **ACTIVE** for ~DEFAULT_BRANCH with no bypass actors, required PR,
+   one approval, code-owner review, thread resolution, required status checks
+   `runtime-container`, `foundation`, `api-container`, non-fast-forward and
+   deletion restrictions. However `dismiss_stale_reviews_on_push=false` and
+   `require_last_push_approval=false`. Recommend human administrator evaluate
+   enabling both for stronger exact-HEAD approval. Ruleset GET works, while
+   legacy `/branches/main/protection` GET returned 403; distinguish the two.
+   This is a snapshot, not independent admin certification or authorization
+   to mutate the ruleset. Source:
+   https://github.com/jadeldiaz01-png/support-tickets/rules/24338389 .
 7. Report individually H-01..H-09 with timestamp/timezone, OS, versions,
    commands run, return codes, log links, hashes, concrete findings, risk
    severity **when reproduced**, and `PASS/PASS_WITH_FINDINGS/FAIL/BLOCKED`.
@@ -118,3 +125,7 @@
   https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
 
 **RELEASE STATUS:** `HOLD / NO_MERGE / PRODUCTION_AUTHORIZED=false`.
+
+## CI evidence on first audit commit
+
+- GitHub Actions run [#38401300750](https://github.com/jadeldiaz01-png/support-tickets/actions/runs/38401300750) on `2b95dbfbfb6a4279aa68fdacd0617e0c90efd76d`: 56 pytest **PASS**, 2 strict **XFAIL** (known gaps), 4 warnings, 3/3 jobs SUCCESS; Alembic rollback/replay PASS. The expected synthetic duplicate-index error in PostgreSQL is a **PASS** for the negative migration test, not a production defect diagnosis. Any follow-up commit requires re-verification of the new exact SHA.
