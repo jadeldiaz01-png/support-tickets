@@ -16,6 +16,7 @@ from sqlalchemy.engine.url import make_url
 
 REV_PRE = "0004_active_assignment_index"
 REV_NEW = "0005_tenant_audit_guard"
+REV_HEAD = "0006_tenant_fks"
 
 
 def assert_disposable() -> str:
@@ -55,7 +56,7 @@ def main():
     ua, ub, ticket_id, invalid_id, good_id = (uuid4() for _ in range(5))
     try:
         with engine.connect() as c:
-            assert version(c) == REV_NEW
+            assert version(c) == REV_HEAD
         migrate(cfg, REV_PRE)
         with engine.begin() as c:
             assert version(c) == REV_PRE
@@ -153,6 +154,12 @@ def main():
             c.execute(text("DELETE FROM tenants WHERE id IN (:ta,:tb)"),
                       {"ta":ta,"tb":tb})
         print("G5_SYNTHETIC_REHEARSAL=PASS NO_PRODUCTION_DATA=TRUE",flush=True)
+        # Restore G6 head after G5 compatibility rehearsal, so subsequent
+        # Alembic rollback/replay tests operate against the correct head.
+        command.upgrade(cfg, REV_HEAD)
+        with engine.connect() as c:
+            assert version(c) == REV_HEAD
+        print("G6_HEAD_RESTORED_AFTER_G5_REHEARSAL=PASS", flush=True)
     finally:
         engine.dispose()
 

@@ -2,7 +2,10 @@
 # G6 reviewer helper — run locally ONLY against a disposable isolated DB.
 # Never downloads source or uses production credentials by itself.
 set -euo pipefail
-EXPECTED_SHA="REPLACE_WITH_G6_EXACT_HEAD"
+EXPECTED_SHA="${G6_EXPECTED_SHA:-}"
+if [[ ! "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+  echo "G6_GATE=BLOCKED: supply reviewer-approved 40-character G6_EXPECTED_SHA" >&2; exit 3
+fi
 if [[ "${G6_DISPOSABLE_TEST_ONLY:-}" != "YES" ]]; then
   echo 'G6_GATE=BLOCKED: explicit disposable test flag required' >&2; exit 2
 fi

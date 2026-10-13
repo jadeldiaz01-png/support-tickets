@@ -99,3 +99,5 @@ in a PR. Do NOT ask the implementer to impersonate the reviewer.
    merge/deployment human gates.
 
 Primary reference: https://www.postgresql.org/docs/16/ddl-constraints.html
+
+CI G5 synthetic rehearsal deliberately downgrades to 0004, tests 0005 and upgrades back to 0006. Reviewer helper requires the independently supplied exact `G6_EXPECTED_SHA`, never a self-changing hardcoded commit hash.
