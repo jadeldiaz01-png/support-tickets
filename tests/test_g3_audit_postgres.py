@@ -2,7 +2,7 @@
 
 Must run exclusively against an isolated disposable CI database. Never point
 DATABASE_URL_OWNER or DATABASE_URL at any production environment.
-Known security gaps are strict xfails, not falsely counted as PASS.
+Previously identified H-01/H-02 and H-05 XFAILs are now strict PASS expectations.
 """
 from __future__ import annotations
 
@@ -200,17 +200,12 @@ def test_h03_h05_h08_private_note_and_failure_no_exfiltration(monkeypatch):
     owner.dispose()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="H-05: runtime CI role currently receives DELETE on audit_events; "
-           "append-only protection not implemented",
-)
 def test_h05_audit_history_must_reject_runtime_delete(monkeypatch):
     test_env(monkeypatch)
     ta, _, ua, _, _, customer = seed()
     client = TestClient(app)
     make_ticket(client, ta, ua, customer)
-    # Failure to raise confirms a permission gap. Transaction is rolled back.
+    # Must fail because the runtime role has neither DELETE privilege nor mutation authority.
     with Session(get_engine()) as session:
         with session.begin():
             bind_tenant(session, ta)
@@ -220,11 +215,6 @@ def test_h05_audit_history_must_reject_runtime_delete(monkeypatch):
                 """), {"tenant": ta})
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="H-01/H-02: child table FK only checks global user ID; "
-           "no composite tenant-user FK guarantees referential tenant integrity",
-)
 def test_h01_direct_fk_must_reject_foreign_tenant_assignee(monkeypatch):
     test_env(monkeypatch)
     ta, _, ua, ub, _, customer = seed()
