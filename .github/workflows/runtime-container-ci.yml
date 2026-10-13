@@ -112,6 +112,12 @@ jobs:
           PY
       - name: Run API and PostgreSQL isolation tests
         run: python3 -m pytest -q
+      - name: G5 isolated synthetic migration failure and recovery rehearsal
+        env:
+          G5_ISOLATED_CI_REHEARSAL: "1"
+        run: |
+          set -euo pipefail
+          python3 ops/g5_migration_rehearsal.py
       - name: Verify migration rollback and replay
         run: |
           python3 -m alembic downgrade base
