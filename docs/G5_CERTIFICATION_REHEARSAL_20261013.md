@@ -95,3 +95,15 @@ Primary references:
   https://www.postgresql.org/docs/16/ddl-priv.html
 - PostgreSQL pg_dump/restore caveats:
   https://www.postgresql.org/docs/16/app-pgdump.html
+
+## Machine-readable CI evidence
+
+The foundation job prints a `G5_READONLY_SCHEMA_PRIVILEGE_EVIDENCE`
+JSON record before the migration rehearsal. It records only role names,
+role memberships, effective audit grants, FK constraint names, count of
+uncoupled tenant-bearing relationships, active trigger and migration
+revision. These are reproducible **test service** facts, not claims about
+real production roles. Uncoupled references require additional threat
+analysis; a missing tenant column in an FK does not automatically prove
+an exploitable vulnerability. If the role privileges or composite FK drift,
+the command exits nonzero and blocks CI.
