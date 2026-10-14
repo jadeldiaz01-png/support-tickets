@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -25,3 +25,35 @@ class TicketResponse(BaseModel):
     priority: str
     version: int
     created_at: datetime
+
+
+class TicketDashboardDay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    count: int = Field(ge=0)
+
+
+class TicketDashboardSummary(BaseModel):
+    """No ticket subjects, bodies, customer IDs or other PII."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: date
+    end: date
+    timezone: Literal["UTC"]
+    cohort_definition: Literal["TICKETS_CREATED_IN_WINDOW_CURRENT_STATE"]
+    total_created: int = Field(ge=0)
+    status_counts: dict[str, int]
+    priority_counts: dict[str, int]
+    created_by_day: list[TicketDashboardDay]
+    generated_at: datetime
+
+
+class TicketStatusTransition(BaseModel):
+    """Internal transition with optimistic concurrency; not a customer message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "RESOLVED", "CLOSED"]
+    expected_version: int = Field(ge=1)

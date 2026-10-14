@@ -48,3 +48,14 @@ def test_oidc_mode_requires_bearer_token(monkeypatch) -> None:
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "BEARER_TOKEN_REQUIRED"
+
+
+def test_ticket_transition_fails_closed_without_auth(monkeypatch) -> None:
+    monkeypatch.setenv("SUPPORT_ENV", "dev")
+    monkeypatch.setenv("SUPPORT_AUTH_MODE", "disabled")
+    response = TestClient(app).patch(
+        "/v1/tickets/00000000-0000-0000-0000-000000000001/status",
+        json={"status": "IN_PROGRESS", "expected_version": 1},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "AUTH_NOT_CONFIGURED"
