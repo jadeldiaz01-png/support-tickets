@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 
 from api.schemas import (
     TicketCreate, TicketDashboardSummary, TicketResponse, TicketStatusTransition,
+    TicketAssignRequest, TicketAssignResult, TicketInternalNoteCreate,
+    TicketInternalNoteResult,
 )
 from application.tickets import TicketService
+from application.workflow import InternalWorkflowService
 from application.dashboard import TicketDashboardService
 from policy.authorizer import authorize
 from repositories.db import get_engine
@@ -126,3 +129,47 @@ def ticket_dashboard_summary(
     )
     response.headers["Cache-Control"] = "private, no-store"
     return TicketDashboardSummary.model_validate(result)
+
+
+@app.patch("/v1/tickets/{ticket_id}/assignment", response_model=TicketAssignResult)
+def assign_internal_ticket(
+    ticket_id: UUID,
+    payload: TicketAssignRequest,
+    response: Response,
+    actor: ActorContext = Depends(get_actor_context),
+    session: Session = Depends(get_db),
+) -> TicketAssignResult:
+    authorize(
+        actor, "ticket:assign",
+        resource={"type": "ticket", "ticket_id": str(ticket_id)},
+    )
+    result = InternalWorkflowService(session).assign(
+        actor=actor, ticket_id=ticket_id,
+        assignee_user_id=payload.assignee_user_id,
+        expected_version=payload.expected_version,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return TicketAssignResult.model_validate(result)
+
+
+@app.post(
+    "/v1/tickets/{ticket_id}/internal-notes",
+    response_model=TicketInternalNoteResult, status_code=201,
+)
+def add_internal_ticket_note(
+    ticket_id: UUID,
+    payload: TicketInternalNoteCreate,
+    response: Response,
+    actor: ActorContext = Depends(get_actor_context),
+    session: Session = Depends(get_db),
+) -> TicketInternalNoteResult:
+    authorize(
+        actor, "ticket:internal_note",
+        resource={"type": "ticket", "ticket_id": str(ticket_id)},
+    )
+    result = InternalWorkflowService(session).internal_note(
+        actor=actor, ticket_id=ticket_id, body=payload.body,
+        expected_version=payload.expected_version,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return TicketInternalNoteResult.model_validate(result)
