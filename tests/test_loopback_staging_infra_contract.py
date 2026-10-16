@@ -47,5 +47,5 @@ def test_runbook_requires_human_gate_and_avoids_live_fleet() -> None:
     )
     assert "PRODUCTION_AUTHORIZED=false" in runbook
     assert "HUMAN RELEASE GATE" in runbook
-    assert "does **not** test OIDC, OPA" in runbook
+    assert "It does not\ntest OIDC, OPA" in runbook
     assert "Do not open port 18080 publicly" in runbook
