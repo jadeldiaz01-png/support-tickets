@@ -32,7 +32,7 @@ sudo docker ps --format 'table {{.Names}}\\t{{.Ports}}'
 python -m pytest -q tests/test_staging_loopback_infrastructure.py
 ```
 
-Confirm port 18080 is free before any manual startup and record the
+Confirm port 18080 is free before any manual startup, verify Docker Engine is current (at least v28.0.0; preferably a patched v28.3.3+ release), and record the
 exact commit SHA. Confirm Docker Engine and Compose are available and the
 VPS has enough capacity. Never share secret values or output of
 `docker inspect`/`docker compose config` containing credentials.
@@ -63,19 +63,19 @@ Only after explicit VPS/container startup approval:
 
 ```bash
 # Preview service names without revealing rendered secrets
-sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \\
+sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \
   docker compose -f ops/staging/compose.yaml config --services
 
 # Separately approved build/start (not part of this PR):
-sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \\
+sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \
   docker compose -f ops/staging/compose.yaml build
-sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \\
+sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \
   docker compose -f ops/staging/compose.yaml up -d
 
 # Local-only observation. No authorization implied.
-curl --fail-with-body --connect-timeout 2 --max-time 5 \\
+curl --fail-with-body --connect-timeout 2 --max-time 5 \
   http://127.0.0.1:18080/health/live
-curl -i --connect-timeout 2 --max-time 5 \\
+curl -i --connect-timeout 2 --max-time 5 \
   http://127.0.0.1:18080/health/ready
 ```
 
@@ -90,7 +90,7 @@ Rollback (operator-approved): stop only this Compose project, not any
 databases/volumes:
 
 ```bash
-sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \\
+sudo env SUPPORT_STAGING_ENV_FILE=/etc/support-tickets/staging.env \
   docker compose -f ops/staging/compose.yaml stop support-api
 ```
 
