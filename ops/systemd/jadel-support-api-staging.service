@@ -1,0 +1,42 @@
+# Deployment template only. Do not enable/start without a separate VPS approval.
+# 127.0.0.1:18080 is only reachable from the same host/network namespace.
+[Unit]
+Description=Jadel Support Tickets FastAPI - local staging (not production)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=jadel-support
+Group=jadel-support
+WorkingDirectory=/opt/jadel-support-api/current
+EnvironmentFile=/etc/jadel-support-api/staging.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/jadel-support-api/current/.venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 18080 --workers 1 --no-proxy-headers --no-access-log
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
