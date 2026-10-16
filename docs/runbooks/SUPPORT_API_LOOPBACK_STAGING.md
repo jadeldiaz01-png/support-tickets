@@ -39,8 +39,8 @@ restrictions. No such network changes are included.
 2. Audit the host read-only:
 
    ```sh
-   sudo ss -ltnp | grep -E ':(8000|8787|18080|18501)\\b' || true
-   sudo docker ps --format 'table {{.Names}}\\t{{.Image}}\\t{{.Ports}}'
+   sudo ss -ltnp | grep -E ':(8000|8787|18080|18501)([^0-9]|$)' || true
+   sudo docker ps --format '{{.Names}} {{.Ports}}'
    sudo systemctl list-unit-files '*support*' --no-pager
    df -h /opt /var
    free -h
