@@ -29,6 +29,7 @@ HIGH_PREFIXES = (
 )
 HIGH_EXACT = {
     "codeowners", ".env", ".gitignore", "dockerfile", "docker-compose.yml",
+    "requirements.txt", "requirements-api.txt", "requirements-dev.txt",
     "docker-compose.yaml", "pyproject.toml", "package.json",
     "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
 }
