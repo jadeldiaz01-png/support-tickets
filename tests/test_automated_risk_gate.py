@@ -27,6 +27,13 @@ class AutomatedRiskGateTests(unittest.TestCase):
         self.assertEqual(gate.classify_path("security/access.rego"), "HIGH")
         self.assertEqual(gate.classify_path("migrations/001_init.sql"), "HIGH")
 
+    def test_python_dependency_manifests_are_high(self):
+        for filename in ("requirements.txt", "requirements-api.txt", "requirements-dev.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(gate.classify_path(filename), "HIGH")
+                self.assertEqual(gate.evaluate([filename], HEAD)["decision"],
+                                 "BLOCKED_HUMAN_AUTHORIZATION_REQUIRED")
+
     def test_high_risk_blocks_without_exact_sha(self):
         result = gate.evaluate(["src/paypal_capture.py"], HEAD, "")
         self.assertEqual(result["decision"], "BLOCKED_HUMAN_AUTHORIZATION_REQUIRED")
