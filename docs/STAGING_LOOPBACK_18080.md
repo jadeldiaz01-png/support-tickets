@@ -27,8 +27,8 @@ Liveness is **not** a production-readiness certificate.
 From a checked-out approved commit:
 
 ```bash
-sudo ss -ltnp | grep -E ':(8000|8787|18080)\\b' || true
-sudo docker ps --format 'table {{.Names}}\\t{{.Ports}}'
+sudo ss -ltnp | grep -E ':(8000|8787|18080)\b' || true
+sudo docker ps --format 'table {{.Names}}\t{{.Ports}}'
 python -m pytest -q tests/test_staging_loopback_infrastructure.py
 ```
 
