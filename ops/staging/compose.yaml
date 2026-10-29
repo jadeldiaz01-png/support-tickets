@@ -1,0 +1,44 @@
+# Isolated, loopback-only staging candidate. Do not start without operator approval.
+# This stack does not provision or attach to any existing production database.
+name: jadel-support-api-staging
+
+services:
+  support-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.api
+    image: jadel-support-api-staging:local
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:8000"
+    env_file:
+      - path: ${SUPPORT_STAGING_ENV_FILE:?Set an absolute path to a staging-only credential file}
+        required: true
+    environment:
+      SUPPORT_ENV: staging
+      SUPPORT_AUTH_MODE: oidc
+      SUPPORT_POLICY_MODE: opa
+      PYTHONDONTWRITEBYTECODE: "1"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: "1.0"
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - support-staging
+
+networks:
+  support-staging:
+    driver: bridge
